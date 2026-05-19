@@ -248,8 +248,8 @@ class MainActivity : AppCompatActivity() {
             try {
                 val nano = GeminiNanoEngine()
                 val status = nano.checkStatus()
-                if (status == com.google.mlkit.genai.prompt.FeatureStatus.AVAILABLE ||
-                    status == com.google.mlkit.genai.prompt.FeatureStatus.DOWNLOADABLE) {
+                if (status == com.google.mlkit.genai.common.FeatureStatus.AVAILABLE ||
+                    status == com.google.mlkit.genai.common.FeatureStatus.DOWNLOADABLE) {
                     nano.prepareIfNeeded()
                     geminiNano = nano
                     useGeminiNano = true
