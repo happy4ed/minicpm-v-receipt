@@ -243,20 +243,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun initEngine() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val nano = GeminiNanoEngine()
-            val status = nano.checkStatus()
-            if (status == com.google.mlkit.genai.prompt.FeatureStatus.AVAILABLE ||
-                status == com.google.mlkit.genai.prompt.FeatureStatus.DOWNLOADABLE) {
-                geminiNano = nano
-                useGeminiNano = true
-                nano.prepareIfNeeded()
-                withContext(Dispatchers.Main) {
-                    isModelReady = true
-                    enableInput(true)
-                    Log.i(TAG, "Using Gemini Nano (status=$status)")
+            var nanoReady = false
+            try {
+                val nano = GeminiNanoEngine()
+                val status = nano.checkStatus()
+                if (status == com.google.mlkit.genai.prompt.FeatureStatus.AVAILABLE ||
+                    status == com.google.mlkit.genai.prompt.FeatureStatus.DOWNLOADABLE) {
+                    nano.prepareIfNeeded()
+                    geminiNano = nano
+                    useGeminiNano = true
+                    nanoReady = true
+                    withContext(Dispatchers.Main) {
+                        isModelReady = true
+                        enableInput(true)
+                        Log.i(TAG, "Using Gemini Nano (status=$status)")
+                    }
+                } else {
+                    Log.i(TAG, "Gemini Nano unavailable (status=$status), falling back to LlamaEngine")
                 }
-            } else {
-                Log.i(TAG, "Gemini Nano unavailable (status=$status), falling back to LlamaEngine")
+            } catch (e: Exception) {
+                Log.w(TAG, "Gemini Nano init failed, falling back to LlamaEngine", e)
+            }
+
+            if (!nanoReady) {
                 engine = LlamaEngine.getInstance(applicationContext)
                 withContext(Dispatchers.Main) {
                     observeEngineState()
@@ -583,7 +592,10 @@ class MainActivity : AppCompatActivity() {
                 engine.sendUserPrompt(prompt)
             }
             responseFlow
-                .onCompletion {
+                .onCompletion { cause ->
+                    if (cause != null && cause !is kotlinx.coroutines.CancellationException) {
+                        Log.e(TAG, "Generation completed with error", cause)
+                    }
                     val elapsedSec = (System.nanoTime() - startNs) / 1_000_000_000.0
                     withContext(Dispatchers.Main) {
                         val index = messages.indexOfFirst { it.id == aiMsgId }
