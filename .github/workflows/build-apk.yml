@@ -1,0 +1,78 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;27.0.12077973" || true
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Publish GitHub Release
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          SIZE=$(du -sh "$APK" | cut -f1)
+
+          RELEASE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/latest-apk")
+          RELEASE_ID=$(echo "$RELEASE" | python3 -c "import sys,json; r=json.load(sys.stdin); print(r.get('id',''))" 2>/dev/null)
+
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(curl -s -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/json" \
+              "https://api.github.com/repos/${{ github.repository }}/releases" \
+              -d '{"tag_name":"latest-apk","name":"Latest APK (debug)","body":"Auto-updated on every push.","prerelease":true}' | \
+              python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          else
+            curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets" | \
+              python3 -c "import sys,json; [print(a['id']) for a in json.load(sys.stdin)]" | \
+              while read AID; do
+                curl -s -X DELETE -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/${{ github.repository }}/releases/assets/$AID"
+              done
+          fi
+
+          DOWNLOAD_URL=$(curl -s -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=minicpm-receipt.apk" \
+            --data-binary @"$APK" | \
+            python3 -c "import sys,json; print(json.load(sys.stdin).get('browser_download_url',''))")
+
+          if [ -n "$DISCORD_WEBHOOK" ] && [ -n "$DOWNLOAD_URL" ]; then
+            curl -s -X POST "$DISCORD_WEBHOOK" \
+              -H "Content-Type: application/json" \
+              -d "{\"content\":\"**MiniCPM Receipt APK 빌드 완료** ✅ (${SIZE})\n다운로드: ${DOWNLOAD_URL}\"}"
+          fi
