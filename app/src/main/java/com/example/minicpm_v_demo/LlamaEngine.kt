@@ -127,8 +127,8 @@ class LlamaEngine private constructor(
             return File(modelDirFor(context, model), model.mmprojFileName).absolutePath
         }
 
-        fun modelsExist(context: Context): Boolean =
-            File(modelPath(context)).exists() && File(mmprojPath(context)).exists()
+        // Receipt-parser fork uses ML Kit for OCR; only the text LLM (gguf) is needed.
+        fun modelsExist(context: Context): Boolean = File(modelPath(context)).exists()
 
         // Rename map for files that were previously sideloaded with a
         // different name and now need to match the iOS demo's filenames so a
@@ -315,23 +315,18 @@ class LlamaEngine private constructor(
                 mmprojSources.add(FileSource("直链", URL(model.directMmprojUrl)))
             }
 
-            if (ggufSources.isEmpty() || mmprojSources.isEmpty()) {
+            if (ggufSources.isEmpty()) {
                 throw RuntimeException("Model ${model.id} has no download source configured")
             }
 
-            val files = listOf(
-                FileSpec(model.ggufFileName, ggufSources, model.ggufMd5),
-                FileSpec(model.mmprojFileName, mmprojSources, model.mmprojMd5),
-            )
+            // Receipt-parser fork: only download the text LLM (gguf). mmproj is
+            // not needed because vision is handled by ML Kit OCR on-device.
+            val racedLabel = ggufSources.joinToString("+") { it.label }
+            onProgress("$racedLabel 다운로드 시작…")
 
-            val racedLabel = files.first().sources.joinToString("+") { it.label }
-            onProgress("$racedLabel 多源 race 启动...")
+            downloadFileMultiSource(dir, model.ggufFileName, ggufSources, model.ggufMd5, onProgress)
 
-            for (file in files) {
-                downloadFileMultiSource(dir, file.name, file.sources, file.md5, onProgress)
-            }
-
-            onProgress("所有模型文件下载完成!")
+            onProgress("모델 다운로드 완료!")
         }
 
         /**

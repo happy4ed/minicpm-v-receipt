@@ -45,7 +45,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnImage: ImageButton
     private lateinit var btnClearChat: ImageButton
     private lateinit var btnModelManager: ImageButton
-    private lateinit var btnImageSlice: ImageButton
     private lateinit var cardInputBar: View
     private lateinit var appBarLayout: AppBarLayout
 
@@ -95,7 +94,6 @@ class MainActivity : AppCompatActivity() {
         btnImage = findViewById(R.id.btn_image)
         btnClearChat = findViewById(R.id.btn_clear_chat)
         btnModelManager = findViewById(R.id.btn_model_manager)
-        btnImageSlice = findViewById(R.id.btn_image_slice)
         cardInputBar = findViewById(R.id.card_input_bar)
         appBarLayout = findViewById(R.id.appBarLayout)
     }
@@ -137,13 +135,12 @@ class MainActivity : AppCompatActivity() {
         // viewable" affordance with no extra "video" button.  Video is
         // only fed to the model if the loaded model is V-4.6 (gated in
         // [handleSelectedMedia] / [LlamaEngine.isVideoUnderstandingSupported]).
-        btnImage.setOnClickListener { getMedia.launch(arrayOf("image/*", "video/*")) }
+        btnImage.setOnClickListener { getMedia.launch(arrayOf("image/*")) }
         btnSend.setOnClickListener { handleUserInput() }
         btnClearChat.setOnClickListener { showClearChatDialog() }
         btnModelManager.setOnClickListener {
             startActivity(Intent(this, ModelManagerActivity::class.java))
         }
-        btnImageSlice.setOnClickListener { showImageSliceDialog() }
 
         etInput.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
@@ -306,36 +303,24 @@ class MainActivity : AppCompatActivity() {
     private fun enableInput(enable: Boolean) {
         etInput.isEnabled = enable
         btnSend.isEnabled = enable
-        if (!enable) {
-            btnImage.isEnabled = false
-        } else {
-            btnImage.isEnabled = engine.isVisionSupported
-        }
+        // Image button uses ML Kit OCR — no VLM needed, always enable with input.
+        btnImage.isEnabled = enable
     }
 
     private fun loadDefaultModel() {
         val ctx = applicationContext
         val ggufFile = File(LlamaEngine.modelPath(ctx))
-        val mmprojFile = File(LlamaEngine.mmprojPath(ctx))
 
-        // Both files must be on-disk before we even try to load. Falling back
-        // to a text-only load when mmproj is missing is the wrong default for
-        // this demo: vision is the marquee feature, and silently disabling
-        // the image button leaves the user wondering why "新装的 apk 点不开
-        // 图片". Common trigger is `migrateLegacyLayoutIfNeeded` having just
-        // purged a stale mmproj after an APK upgrade - in that case the user
-        // needs to re-download from "模型管理".
-        if (!ggufFile.exists() || !mmprojFile.exists()) {
-            promptDownloadModels(
-                ggufMissing = !ggufFile.exists(),
-                mmprojMissing = !mmprojFile.exists()
-            )
+        // Receipt-parser fork: only the text LLM (gguf) is needed.
+        // ML Kit handles all image processing; mmproj is not downloaded.
+        if (!ggufFile.exists()) {
+            promptDownloadModels(ggufMissing = true, mmprojMissing = false)
             return
         }
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                engine.loadModel(ggufFile.absolutePath, mmprojFile.absolutePath)
+                engine.loadModel(ggufFile.absolutePath, null)
                 // No default system prompt: aligned with iOS opt-r1. See
                 // clearChat() above for the rationale.
             } catch (e: Exception) {
