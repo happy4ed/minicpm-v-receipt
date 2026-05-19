@@ -103,6 +103,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         chatAdapter = ChatAdapter(Markwon.create(this))
         chatAdapter.setOnStopClick {
+            Log.i(TAG, "stop requested")
             generationJob?.cancel()
             if (!useGeminiNano && ::engine.isInitialized) engine.cancelGeneration()
         }
@@ -259,10 +260,10 @@ class MainActivity : AppCompatActivity() {
                         Log.i(TAG, "Using Gemini Nano (status=$status)")
                     }
                 } else {
-                    Log.i(TAG, "Gemini Nano unavailable (status=$status), falling back to LlamaEngine")
+                    Log.i(TAG, "fallback path entered: Gemini Nano unavailable (status=$status)")
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Gemini Nano init failed, falling back to LlamaEngine", e)
+                Log.w(TAG, "fallback path entered: Gemini Nano init exception", e)
             }
 
             if (!nanoReady) {
@@ -594,7 +595,7 @@ class MainActivity : AppCompatActivity() {
             responseFlow
                 .onCompletion { cause ->
                     if (cause != null && cause !is kotlinx.coroutines.CancellationException) {
-                        Log.e(TAG, "Generation completed with error", cause)
+                        Log.e(TAG, "generation error handled", cause)
                     }
                     val elapsedSec = (System.nanoTime() - startNs) / 1_000_000_000.0
                     withContext(Dispatchers.Main) {
