@@ -46,11 +46,7 @@ class ModelManagerActivity : AppCompatActivity() {
             // posts a notification, the user just won't see it. Foreground
             // service itself is allowed without the permission.
             if (!granted) {
-                Toast.makeText(
-                    this,
-                    "未授权通知权限，下载会继续，但你将看不到进度通知",
-                    Toast.LENGTH_LONG
-                ).show()
+                Toast.makeText(this, R.string.toast_notification_denied, Toast.LENGTH_LONG).show()
             }
             startDownloadService()
         }
@@ -89,7 +85,7 @@ class ModelManagerActivity : AppCompatActivity() {
             onModelSelected = { model ->
                 LlamaEngine.setSelectedModel(this, model.id)
                 updateLoadButtonState()
-                Toast.makeText(this, "已选择: ${model.displayName}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.toast_model_selected, model.displayName), Toast.LENGTH_SHORT).show()
             }
         )
 
@@ -127,16 +123,16 @@ class ModelManagerActivity : AppCompatActivity() {
                         tvModelStatus.text = getString(R.string.status_generating)
                     }
                     is LlamaState.PrefillingImage -> {
-                        tvModelStatus.text = "正在处理图片..."
+                        tvModelStatus.text = getString(R.string.status_prefilling_image)
                     }
                     is LlamaState.Generating -> {
                         tvModelStatus.text = getString(R.string.status_generating)
                     }
                     is LlamaState.UnloadingModel -> {
-                        tvModelStatus.text = "正在卸载模型..."
+                        tvModelStatus.text = getString(R.string.status_unloading)
                     }
                     is LlamaState.Error -> {
-                        tvModelStatus.text = "错误: ${state.exception.message}"
+                        tvModelStatus.text = getString(R.string.status_error, state.exception.message)
                         btnLoadModel.isEnabled = true
                         btnDownload.isEnabled = true
                     }
@@ -151,19 +147,19 @@ class ModelManagerActivity : AppCompatActivity() {
         btnLoadModel.isEnabled = exists
         btnDeleteModel.visibility = if (exists) View.VISIBLE else View.GONE
         btnLoadModel.text = when {
-            isReady -> "重新加载"
+            isReady -> getString(R.string.btn_reload_model)
             exists -> getString(R.string.load_model)
-            else -> "无模型文件"
+            else -> getString(R.string.btn_no_model_file)
         }
     }
 
     private fun onDownloadClicked() {
         if (ModelDownloadController.isRunning) {
-            Toast.makeText(this, "正在下载中...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_downloading_in_progress, Toast.LENGTH_SHORT).show()
             return
         }
         if (LlamaEngine.modelsExist(this)) {
-            Toast.makeText(this, "模型文件已存在，无需重复下载", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_model_exists, Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -217,15 +213,15 @@ class ModelManagerActivity : AppCompatActivity() {
                         }
                         is ModelDownloadController.Status.Completed -> {
                             progressDownload.visibility = View.GONE
-                            tvModelStatus.text = "下载完成! 请点击加载模型"
-                            Toast.makeText(this@ModelManagerActivity, "下载完成!", Toast.LENGTH_SHORT).show()
+                            tvModelStatus.text = getString(R.string.status_download_complete)
+                            Toast.makeText(this@ModelManagerActivity, R.string.toast_download_complete, Toast.LENGTH_SHORT).show()
                             btnDownload.isEnabled = true
                             updateLoadButtonState()
                             ModelDownloadController.acknowledge()
                         }
                         is ModelDownloadController.Status.Cancelled -> {
                             progressDownload.visibility = View.GONE
-                            tvModelStatus.text = "已取消下载"
+                            tvModelStatus.text = getString(R.string.status_download_cancelled)
                             btnDownload.isEnabled = true
                             updateLoadButtonState()
                             ModelDownloadController.acknowledge()
@@ -233,10 +229,10 @@ class ModelManagerActivity : AppCompatActivity() {
                         is ModelDownloadController.Status.Failed -> {
                             Log.w(TAG, "Download failed: ${status.message}")
                             progressDownload.visibility = View.GONE
-                            tvModelStatus.text = "下载失败: ${status.message}"
+                            tvModelStatus.text = getString(R.string.status_download_failed, status.message)
                             Toast.makeText(
                                 this@ModelManagerActivity,
-                                "下载失败: ${status.message}",
+                                getString(R.string.status_download_failed, status.message),
                                 Toast.LENGTH_LONG
                             ).show()
                             btnDownload.isEnabled = true
@@ -252,7 +248,7 @@ class ModelManagerActivity : AppCompatActivity() {
     private fun loadSelectedModel() {
         val currentState = engine.state.value
         if (currentState is LlamaState.LoadingModel) {
-            Toast.makeText(this, "模型正在加载中...", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_model_loading, Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -260,7 +256,7 @@ class ModelManagerActivity : AppCompatActivity() {
         val mmprojPath = LlamaEngine.mmprojPath(applicationContext)
 
         if (!File(modelPath).exists()) {
-            Toast.makeText(this, "模型文件不存在，请先下载", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, R.string.toast_model_file_missing, Toast.LENGTH_LONG).show()
             return
         }
 
@@ -285,13 +281,13 @@ class ModelManagerActivity : AppCompatActivity() {
                     btnLoadModel.isEnabled = true
                     btnDownload.isEnabled = true
                     updateLoadButtonState()
-                    Toast.makeText(this@ModelManagerActivity, "模型加载成功!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ModelManagerActivity, R.string.toast_model_loaded, Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading model", e)
                 engine.resetToInitialized()
                 withContext(Dispatchers.Main) {
-                    tvModelStatus.text = "加载失败: ${e.message}"
+                    tvModelStatus.text = getString(R.string.status_load_failed, e.message)
                     btnLoadModel.isEnabled = true
                     btnDownload.isEnabled = true
                     updateLoadButtonState()
@@ -303,10 +299,10 @@ class ModelManagerActivity : AppCompatActivity() {
     private fun confirmDeleteModel() {
         val model = LlamaEngine.getSelectedModel(this)
         AlertDialog.Builder(this)
-            .setTitle("删除模型文件")
-            .setMessage("确定要删除 ${model.displayName} 的模型文件吗？\n\n这将删除:\n• ${model.ggufFileName}\n• ${model.mmprojFileName}\n\n删除后需要重新下载才能使用。")
-            .setPositiveButton("删除") { _, _ -> deleteModelFiles() }
-            .setNegativeButton("取消", null)
+            .setTitle(R.string.dialog_delete_model_title)
+            .setMessage(getString(R.string.dialog_delete_model_message, model.displayName, model.ggufFileName, model.mmprojFileName))
+            .setPositiveButton(R.string.dialog_delete) { _, _ -> deleteModelFiles() }
+            .setNegativeButton(R.string.dialog_cancel, null)
             .show()
     }
 
@@ -323,16 +319,16 @@ class ModelManagerActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     updateLoadButtonState()
                     if (deleted) {
-                        tvModelStatus.text = "模型文件已删除"
-                        Toast.makeText(this@ModelManagerActivity, "模型文件已删除", Toast.LENGTH_SHORT).show()
+                        tvModelStatus.text = getString(R.string.status_model_deleted)
+                        Toast.makeText(this@ModelManagerActivity, R.string.toast_model_deleted, Toast.LENGTH_SHORT).show()
                     } else {
-                        Toast.makeText(this@ModelManagerActivity, "没有可删除的文件", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@ModelManagerActivity, R.string.toast_no_files_to_delete, Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error deleting model", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@ModelManagerActivity, "删除失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@ModelManagerActivity, getString(R.string.toast_delete_failed, e.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }

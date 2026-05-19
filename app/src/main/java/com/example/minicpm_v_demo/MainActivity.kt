@@ -337,7 +337,7 @@ class MainActivity : AppCompatActivity() {
                 engine.resetToInitialized()
                 hasAutoLoaded = false
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "模型加载失败: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.error_load_model, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -345,26 +345,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun promptDownloadModels(ggufMissing: Boolean, mmprojMissing: Boolean) {
         val message = when {
-            ggufMissing && mmprojMissing ->
-                "未检测到模型文件。请前往“模型管理”下载后再使用。"
-            mmprojMissing ->
-                "本次升级更新了图像模型（mmproj）。\n请前往“模型管理”重新下载，否则无法使用图片识别功能。"
-            else ->
-                "模型文件不完整。请前往“模型管理”重新下载。"
+            ggufMissing && mmprojMissing -> getString(R.string.dialog_model_missing_both)
+            mmprojMissing -> getString(R.string.dialog_model_missing_mmproj)
+            else -> getString(R.string.dialog_model_incomplete)
         }
         AlertDialog.Builder(this)
-            .setTitle("需要下载模型")
+            .setTitle(R.string.dialog_need_download_title)
             .setMessage(message)
             .setCancelable(false)
-            .setPositiveButton("去下载") { _, _ ->
+            .setPositiveButton(R.string.dialog_go_download) { _, _ ->
                 startActivity(Intent(this, ModelManagerActivity::class.java))
             }
-            .setNegativeButton("稍后") { _, _ ->
-                Toast.makeText(
-                    this,
-                    "可随时点击右上角“模型管理”按钮下载",
-                    Toast.LENGTH_LONG
-                ).show()
+            .setNegativeButton(R.string.dialog_later) { _, _ ->
+                Toast.makeText(this, R.string.snack_download_anytime, Toast.LENGTH_LONG).show()
             }
             .show()
     }
@@ -377,7 +370,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleSelectedMedia(uri: Uri) {
         if (!isModelReady) {
-            Toast.makeText(this, "请先加载模型", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.model_not_loaded, Toast.LENGTH_SHORT).show()
             return
         }
         val mime = contentResolver.getType(uri).orEmpty()
@@ -385,7 +378,7 @@ class MainActivity : AppCompatActivity() {
             mime.startsWith("video/") -> handleSelectedVideo(uri)
             mime.startsWith("image/") || mime.isEmpty() -> handleSelectedImage(uri)
             else -> {
-                Toast.makeText(this, "不支持的文件类型: $mime", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.error_unsupported_file, mime), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -440,7 +433,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing image", e)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "处理图片失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.error_process_image, e.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -460,9 +453,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun handleSelectedVideo(uri: Uri) {
         if (!engine.isVideoUnderstandingSupported) {
-            Toast.makeText(this,
-                "视频理解仅在 MiniCPM-V-4.6 上可用，请前往“模型管理”切换模型",
-                Toast.LENGTH_LONG).show()
+            Toast.makeText(this, R.string.error_video_not_supported, Toast.LENGTH_LONG).show()
             return
         }
 
@@ -495,7 +486,7 @@ class MainActivity : AppCompatActivity() {
                         if (index >= 0) {
                             val cur = messages[index] as ChatMessage.UserMessage
                             messages[index] = cur.copy(
-                                imageInfo = "$info · 处理中 $current/$total"
+                                imageInfo = "$info · ${getString(R.string.video_frame_progress, current, total)}"
                             )
                             chatAdapter.submitList(messages.toList())
                         }
@@ -510,7 +501,7 @@ class MainActivity : AppCompatActivity() {
                     if (index >= 0) {
                         val cur = messages[index] as ChatMessage.UserMessage
                         messages[index] = cur.copy(
-                            imageInfo = "$info · 预处理 ${elapsedMs / 1000.0}s",
+                            imageInfo = "$info · ${getString(R.string.video_prefill_done, elapsedMs / 1000.0)}",
                             isPrefilling = false
                         )
                         chatAdapter.submitList(messages.toList())
@@ -524,7 +515,7 @@ class MainActivity : AppCompatActivity() {
                         messages.removeAt(index)
                         chatAdapter.submitList(messages.toList())
                     }
-                    Toast.makeText(this@MainActivity, "处理视频失败: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, getString(R.string.error_process_video, e.message), Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -546,7 +537,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleUserInput() {
         val userMsg = etInput.text.toString().trim()
         if (userMsg.isEmpty()) {
-            Toast.makeText(this, "Type a message first", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.hint_type_message, Toast.LENGTH_SHORT).show()
             return
         }
 

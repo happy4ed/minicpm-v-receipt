@@ -28,7 +28,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="选择模型"
+                android:text="@string/select_model"
                 android:textSize="14sp"
                 android:textStyle="bold"
                 android:textColor="?attr/colorOnSurface"
@@ -102,7 +102,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="删除模型文件"
+                        android:text="@string/delete_model"
                         android:textColor="?attr/colorError"
                         app:strokeColor="?attr/colorError"
                         app:cornerRadius="12dp" />
