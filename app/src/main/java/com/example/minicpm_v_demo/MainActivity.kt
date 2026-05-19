@@ -23,11 +23,15 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.textfield.TextInputEditText
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import io.noties.markwon.Markwon
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -49,6 +53,7 @@ class MainActivity : AppCompatActivity() {
     private var generationJob: Job? = null
     private var isModelReady = false
     private var isImagePrefilled = false
+    private var pendingOcrText: String? = null
     private var hasAutoLoaded = false
     private var messageIdCounter = 1L
     private val messages = mutableListOf<ChatMessage>()
@@ -231,6 +236,7 @@ class MainActivity : AppCompatActivity() {
                     messages.add(ChatMessage.WelcomeCard())
                     messageIdCounter = 1L
                     isImagePrefilled = false
+                    pendingOcrText = null
                     chatAdapter.submitList(messages.toList())
                     Toast.makeText(this@MainActivity, R.string.clear_chat_toast, Toast.LENGTH_SHORT).show()
                 }
@@ -386,45 +392,43 @@ class MainActivity : AppCompatActivity() {
     private fun handleSelectedImage(uri: Uri) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val imageData = contentResolver.openInputStream(uri)?.use { input ->
-                    val bitmap = BitmapFactory.decodeStream(input)
-                        ?: throw RuntimeException("无法解码图片")
-                    val stream = ByteArrayOutputStream()
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
-                    Pair(stream.toByteArray(), bitmap)
-                } ?: throw RuntimeException("无法读取图片")
+                val bitmap = contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input)
+                } ?: throw RuntimeException("이미지를 읽을 수 없습니다")
 
-                val (imageBytes, bitmap) = imageData
-
-                val imageName = getFileName(uri)
-                val width = bitmap.width
-                val height = bitmap.height
-                val sizeKb = imageBytes.size / 1024
-                val imageInfo = "$width x $height ($sizeKb KB)"
+                val sizeKb = (bitmap.byteCount / 1024)
+                val baseInfo = "${bitmap.width} x ${bitmap.height} ($sizeKb KB)"
                 val msgId = messageIdCounter++
 
                 withContext(Dispatchers.Main) {
-                    val imageMessage = ChatMessage.UserMessage(
+                    messages.add(ChatMessage.UserMessage(
                         id = msgId,
                         text = "",
                         imageBitmap = bitmap,
-                        imageInfo = imageInfo,
+                        imageInfo = getString(R.string.status_ocr_running),
                         isPrefilling = true
-                    )
-                    messages.add(imageMessage)
-                    chatAdapter.submitList(messages.toList()) {
-                        scrollToBottom()
-                    }
+                    ))
+                    chatAdapter.submitList(messages.toList()) { scrollToBottom() }
                 }
 
-                engine.prefillImage(imageBytes)
+                // ML Kit OCR — replaces engine.prefillImage() for receipt parsing
+                val recognizer = TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
+                val ocrText = try {
+                    recognizer.process(InputImage.fromBitmap(bitmap, 0)).await().text
+                } finally {
+                    recognizer.close()
+                }
 
+                pendingOcrText = ocrText.ifBlank { null }
                 isImagePrefilled = true
 
                 withContext(Dispatchers.Main) {
+                    val status = if (ocrText.isNotBlank()) getString(R.string.status_ocr_done)
+                                 else getString(R.string.status_ocr_no_text)
                     val index = messages.indexOfFirst { it.id == msgId }
                     if (index >= 0) {
                         messages[index] = (messages[index] as ChatMessage.UserMessage).copy(
+                            imageInfo = "$baseInfo · $status",
                             isPrefilling = false
                         )
                         chatAdapter.submitList(messages.toList())
@@ -558,6 +562,8 @@ class MainActivity : AppCompatActivity() {
             scrollToBottom()
         }
 
+        val ocrText = pendingOcrText
+        pendingOcrText = null
         isImagePrefilled = false
 
         val aiMsgId = messageIdCounter++
@@ -571,7 +577,12 @@ class MainActivity : AppCompatActivity() {
         generationJob = lifecycleScope.launch(Dispatchers.Default) {
             val fullResponse = StringBuilder()
             val startNs = System.nanoTime()
-            engine.sendUserPrompt(userMsg)
+            val prompt = if (ocrText != null) {
+                "${getString(R.string.ocr_context_label)}\n$ocrText\n\n$userMsg"
+            } else {
+                userMsg
+            }
+            engine.sendUserPrompt(prompt)
                 .onCompletion {
                     val elapsedSec = (System.nanoTime() - startNs) / 1_000_000_000.0
                     withContext(Dispatchers.Main) {
