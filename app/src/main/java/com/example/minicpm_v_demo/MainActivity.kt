@@ -49,6 +49,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var appBarLayout: AppBarLayout
 
     private lateinit var engine: LlamaEngine
+    private var geminiNano: GeminiNanoEngine? = null
+    private var useGeminiNano = false
     private var generationJob: Job? = null
     private var isModelReady = false
     private var isImagePrefilled = false
@@ -101,7 +103,8 @@ class MainActivity : AppCompatActivity() {
     private fun setupRecyclerView() {
         chatAdapter = ChatAdapter(Markwon.create(this))
         chatAdapter.setOnStopClick {
-            engine.cancelGeneration()
+            generationJob?.cancel()
+            if (!useGeminiNano && ::engine.isInitialized) engine.cancelGeneration()
         }
         chatAdapter.setOnSuggestionClick { suggestion ->
             if (isModelReady) {
@@ -218,39 +221,46 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearChat() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                engine.clearContext()
-                // No default system prompt: aligned with iOS opt-r1 (see
-                // MBMtmd.mm top-of-file note). The reference Python pipeline
-                // (`AutoModel.chat(...)` / `apply_chat_template`) does not
-                // insert one either, and an English-only system string biases
-                // MiniCPM-V into answering Chinese queries in English.
-                // If a caller wants a system prompt, call setSystemPrompt
-                // explicitly here before the first user turn.
-                withContext(Dispatchers.Main) {
-                    messages.clear()
-                    messages.add(ChatMessage.WelcomeCard())
-                    messageIdCounter = 1L
-                    isImagePrefilled = false
-                    pendingOcrText = null
-                    chatAdapter.submitList(messages.toList())
-                    Toast.makeText(this@MainActivity, R.string.clear_chat_toast, Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error clearing context", e)
-                withContext(Dispatchers.Main) {
+        lifecycleScope.launch {
+            if (::engine.isInitialized) {
+                try {
+                    withContext(Dispatchers.IO) { engine.clearContext() }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error clearing context", e)
                     Toast.makeText(this@MainActivity, getString(R.string.clear_chat_failed, e.message), Toast.LENGTH_SHORT).show()
+                    return@launch
                 }
             }
+            messages.clear()
+            messages.add(ChatMessage.WelcomeCard())
+            messageIdCounter = 1L
+            isImagePrefilled = false
+            pendingOcrText = null
+            chatAdapter.submitList(messages.toList())
+            Toast.makeText(this@MainActivity, R.string.clear_chat_toast, Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun initEngine() {
-        lifecycleScope.launch(Dispatchers.Default) {
-            engine = LlamaEngine.getInstance(applicationContext)
-            withContext(Dispatchers.Main) {
-                observeEngineState()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val nano = GeminiNanoEngine()
+            val status = nano.checkStatus()
+            if (status == com.google.mlkit.genai.prompt.FeatureStatus.AVAILABLE ||
+                status == com.google.mlkit.genai.prompt.FeatureStatus.DOWNLOADABLE) {
+                geminiNano = nano
+                useGeminiNano = true
+                nano.prepareIfNeeded()
+                withContext(Dispatchers.Main) {
+                    isModelReady = true
+                    enableInput(true)
+                    Log.i(TAG, "Using Gemini Nano (status=$status)")
+                }
+            } else {
+                Log.i(TAG, "Gemini Nano unavailable (status=$status), falling back to LlamaEngine")
+                engine = LlamaEngine.getInstance(applicationContext)
+                withContext(Dispatchers.Main) {
+                    observeEngineState()
+                }
             }
         }
     }
@@ -567,13 +577,21 @@ class MainActivity : AppCompatActivity() {
             } else {
                 userMsg
             }
-            engine.sendUserPrompt(prompt)
+            val responseFlow = if (useGeminiNano) {
+                geminiNano!!.generate(prompt)
+            } else {
+                engine.sendUserPrompt(prompt)
+            }
+            responseFlow
                 .onCompletion {
                     val elapsedSec = (System.nanoTime() - startNs) / 1_000_000_000.0
                     withContext(Dispatchers.Main) {
                         val index = messages.indexOfFirst { it.id == aiMsgId }
                         if (index >= 0) {
                             val finalText = fullResponse.toString()
+                                .replace(Regex("^```(?:json)?\\s*", RegexOption.MULTILINE), "")
+                                .replace(Regex("```$", RegexOption.MULTILINE), "")
+                                .trim()
                             val timedText = "$finalText\n\n⏱ ${"%.1f".format(elapsedSec)}s"
                             messages[index] = (messages[index] as ChatMessage.AiMessage).copy(
                                 text = timedText,
