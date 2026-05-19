@@ -75,12 +75,10 @@ class LlamaEngine private constructor(
         // side to keep the slider semantics honest.
         const val MIN_IMAGE_SLICE = 1
         const val MAX_IMAGE_SLICE = 9
-        // Out-of-the-box we run with MiniCPM-V's full slice budget (9 =
-        // the model's built-in default) so first-launch image quality
-        // matches what the model card promises.  Users who care about
-        // prefill latency drop the chat-page slider down to 1 (no
-        // slicing, ~9x fewer image tokens).
-        const val DEFAULT_IMAGE_SLICE = MAX_IMAGE_SLICE
+        // Default lowered to 3 for this receipt-parsing fork: receipts are
+        // mostly text and 3 slices gives ~3x faster prefill vs. the 9-slice
+        // maximum with very little quality loss on printed text.
+        const val DEFAULT_IMAGE_SLICE = 3
 
         fun getInstance(context: Context): LlamaEngine =
             instance ?: synchronized(this) {

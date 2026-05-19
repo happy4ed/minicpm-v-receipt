@@ -101,7 +101,7 @@
     <string name="image_slice_dialog_title">이미지 분할</string>
     <string name="image_slice_label_min">1\n빠름</string>
     <string name="image_slice_label_max">9\n선명</string>
-    <string name="image_slice_hint">분할 수가 많을수록 세밀한 인식이 가능하지만 토큰이 많아지고 응답이 느려집니다.\n• 1: 전체 이미지만 (가장 빠름, 분할 없음)\n• 9: MiniCPM-V 최대 (기본값, 가장 선명)</string>
+    <string name="image_slice_hint">분할 수가 많을수록 세밀한 인식이 가능하지만 토큰이 많아지고 응답이 느려집니다.\n• 1: 전체 이미지만 (가장 빠름, 분할 없음)\n• 3: 영수증 최적 (기본값, 속도/품질 균형)\n• 9: MiniCPM-V 최대 (가장 선명)</string>
     <string name="image_slice_apply_toast">이미지 분할: %1$d로 설정됨</string>
     <string name="image_slice_pending_toast">%1$d 슬라이스로 저장 — 다음 모델 로드 시 적용됩니다</string>
 </resources>
