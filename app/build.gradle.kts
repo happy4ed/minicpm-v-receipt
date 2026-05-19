@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.minicpm_v_demo"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 13
         versionName = "2.1-receipt"
