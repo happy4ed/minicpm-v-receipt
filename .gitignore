@@ -23,8 +23,7 @@ app/build/
 app/.cxx/
 .kotlin/
 
-# Native libs produced by the buildGgmlCpu_v86 task (built per-machine).
-app/src/main/jniLibs/
+# jniLibs are now prebuilt and tracked in the repo
 
 *.gguf
 *.bin
